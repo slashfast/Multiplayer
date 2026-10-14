@@ -234,16 +234,6 @@ namespace Multiplayer.Client.Util
         {
             password ??= "";
 
-            TextEditor te =
-                GUI.GetNameOfFocusedControl() == controlName ?
-                    (TextEditor)GUIUtility.GetStateObject(typeof(TextEditor), GUIUtility.keyboardControl) :
-                    null;
-
-            Vector2 scrollOffset = default;
-            bool keyDown = Event.current.type == EventType.KeyDown;
-            if (te != null)
-                scrollOffset = te.scrollOffset;
-
             GUI.SetNextControlName(controlName);
 
             if (Event.current.type is EventType.Repaint or EventType.MouseDown)
@@ -258,14 +248,6 @@ namespace Multiplayer.Client.Util
                     password,
                     Text.textFieldStyles[1]
                 );
-
-            if (te != null && keyDown)
-            {
-                te.scrollOffset = scrollOffset;
-                te.text = new string(PassChar, password.Length);
-                AccessTools.Field(typeof(TextEditor), "m_RevealCursor").SetValue(te, true);
-                te.UpdateScrollOffsetIfNeeded(new Event());
-            }
         }
     }
 

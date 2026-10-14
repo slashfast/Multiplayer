@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>12</LangVersion>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -23,9 +23,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- .NET also has System.Reflection.MethodInvoker -->
+    <Using Include="HarmonyLib.MethodInvoker" Alias="MethodInvoker" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Krafs.Publicizer" Version="2.3.0" />
-    <PackageReference Include="Lib.Harmony" Version="2.4.2" ExcludeAssets="runtime" />
-    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.6.4850" />
+    <PackageReference Include="Lib.Harmony" Version="3.0.0-rc.2" ExcludeAssets="runtime" />
+    <PackageReference Include="Krafs.Rimworld.Ref" Version="1.7.4977-alpha.1" />
     <PackageReference Include="RestSharp" Version="106.15.0" />
     <PackageReference Include="RimWorld.MultiplayerAPI" Version="0.6.0" />
   </ItemGroup>
@@ -50,13 +55,6 @@
 <!--      <HintPath>bin\Multiplayer.dll_orig</HintPath>-->
 <!--    </Reference>-->
   </ItemGroup>
-
-  <!-- Ignore any system frameworks and get the system assemblies from Krafs.Rimworld.Ref -->
-  <Target Name="RemoveFramework" BeforeTargets="PrepareForBuild" DependsOnTargets="GetReferenceAssemblyPaths">
-    <PropertyGroup>
-      <TargetFrameworkDirectory></TargetFrameworkDirectory>
-    </PropertyGroup>
-  </Target>
 
   <PropertyGroup>
     <ModOutputPath>..\..\</ModOutputPath>
