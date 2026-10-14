@@ -17,14 +17,14 @@ cp -r ../About ../Textures .
 
 cat <<EOF > LoadFolders.xml
 <loadFolders>
+  <v1.7>
+    <li>/</li>
+    <li>1.7</li>
+  </v1.7>
   <v1.6>
     <li>/</li>
     <li>1.6</li>
   </v1.6>
-  <v1.5>
-    <li>/</li>
-    <li>1.5</li>
-  </v1.5>
 </loadFolders>
 EOF
 
@@ -36,20 +36,20 @@ else
   FULL_VERSION="${VERSION}"
   echo "WARN: Failed to check git commit: ${GIT_COMMIT}"
 fi
-sed -i "/<supportedVersions>/ a \ \ \ \ <li>1.5</li>" About/About.xml
+sed -i "/<supportedVersions>/ a \ \ \ \ <li>1.6</li>" About/About.xml
 sed -i "s/<modVersion>.*<\/modVersion>.*\$/<modVersion>${FULL_VERSION}<\/modVersion>/" About/About.xml
 
 # The current version
-mkdir -p 1.6
-cp -r ../Assemblies ../AssembliesCustom ../Defs ../Languages 1.6/
-rm -f 1.6/Languages/.git 1.6/Languages/LICENSE 1.6/Languages/README.md
+mkdir -p 1.7
+cp -r ../Assemblies ../AssembliesCustom ../Defs ../Languages 1.7/
+rm -f 1.7/Languages/.git 1.7/Languages/LICENSE 1.7/Languages/README.md
 
 # Past versions
-git clone -b rw-1.5 --depth=1 --single-branch --recurse-submodules https://github.com/rwmt/Multiplayer.git 1.5 || { echo 'Git cloning 1.5 FAILED' ; exit 1; }
+git clone -b rw-1.6 --depth=1 --single-branch --recurse-submodules https://github.com/rwmt/Multiplayer.git 1.6 || { echo 'Git cloning 1.6 FAILED' ; exit 1; }
 shopt -s extglob
 shopt -s dotglob
-rm -rf -- 1.5/!(Languages|Assemblies|AssembliesCustom|Defs)
-rm -f 1.5/Languages/.git 1.5/Languages/LICENSE 1.5/Languages/README.md
+rm -rf -- 1.6/!(Languages|Assemblies|AssembliesCustom|Defs)
+rm -f 1.6/Languages/.git 1.6/Languages/LICENSE 1.6/Languages/README.md
 
 cd ..
 
