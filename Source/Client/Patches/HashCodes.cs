@@ -94,149 +94,80 @@ namespace Multiplayer.Client.Patches
         }
     }
 
-    // Have created a patch that will handle 2-8 System.HashCode.Combine functions.
-    // TODO: Check the following:
-    // TileQueryParams.GetHashCode
-    // UnmanagedGridTraverseParams.GetHashCode
-    // MapGridRequest.GetHashCode
-    // SimplifiedPastureNutritionSimulator.GetHashCode
-    // FieldAliasCache.GetHashCode
-    static class HashCodeDetours
-    {
-        private static readonly Type HashCodeType = typeof(string).Assembly.GetType("System.HashCode");
-
-        internal static MethodBase GetCombineIntMethod(int numOfInts)
-        {
-            Type[] intTypes = Enumerable.Repeat(typeof(int), numOfInts).ToArray();
-
-            // Look for a pre-compiled int,int,… overload (only exists on some runtimes)
-            MethodInfo method = HashCodeType.GetMethod("Combine", BindingFlags.Public | BindingFlags.Static, binder: null, types: intTypes, modifiers: null);
-            if (method != null)
-                return method;   // good – no generics involved
-
-            // Fall back to the generic definition and close it for <int,…,int>
-            MethodInfo genericMethod = HashCodeType.GetMethods(BindingFlags.Public | BindingFlags.Static)
-                                 .First(x =>
-                                    x.Name == "Combine" &&
-                                    x.IsGenericMethodDefinition &&
-                                    x.GetGenericArguments().Length == numOfInts);
-
-            return genericMethod.MakeGenericMethod(intTypes);
-        }
-    }
-
-    //  ─── PATCH 2 ints ─────────────────────────────────────────
+    // System.HashCode.Combine is seeded randomly per process. Game code uses Combine with int arguments for rand seeds
+    // (Map.NextGenSeed, LayoutWorker.FillAllRooms, Gravship.ConstantRandSeed, Building_Trap.KnowsOfTrap) and hash codes,
+    // which have to be the same for all players. The calls are replaced in the calling game methods instead of patching
+    // HashCode.Combine itself: once the JIT optimizes other BCL methods it inlines the original Combine into them
+    // (e.g. ValueTuple.GetHashCode used by Dictionary), so a patched Combine made the same key hash differently over
+    // time and broke dictionaries (lost load IDs on reload). Calls are replaced always, not only in multiplayer, so the
+    // hash codes don't change when a game gets hosted.
     [HarmonyPatch]
-    static class Combine2Patch
+    static class HashCodeCombineCallers
     {
-        static MethodBase TargetMethod() => HashCodeDetours.GetCombineIntMethod(2);
-
-        static bool Prefix(int value1, int value2, ref int __result)
+        static IEnumerable<MethodBase> TargetMethods()
         {
-            if (Multiplayer.Client == null)
-                return true;
+            var module = typeof(Game).Assembly.ManifestModule;
+            var combineSpecs = new HashSet<int>();
 
-            __result = Gen.HashCombineInt(value1, value2);
-            return false;
+            // MethodSpec table entries for HashCode.Combine<int, ...>
+            for (int i = 1; ; i++)
+            {
+                int token = 0x2B000000 | i;
+                MethodBase spec;
+                try { spec = module.ResolveMethod(token); }
+                catch (ArgumentOutOfRangeException) { break; }
+                catch (Exception) { continue; } // needs a generic context, can't be HashCode.Combine<int, ...>
+
+                if (spec is MethodInfo { IsGenericMethod: true } m && m.DeclaringType == typeof(HashCode) &&
+                    m.Name == nameof(HashCode.Combine) && m.GetGenericArguments().All(t => t == typeof(int)))
+                    combineSpecs.Add(token);
+            }
+
+            const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public |
+                                     BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+
+            foreach (var type in AccessTools.GetTypesFromAssembly(typeof(Game).Assembly))
+            foreach (var method in type.GetMethods(all).Cast<MethodBase>().Concat(type.GetConstructors(all)))
+            {
+                if (method.IsAbstract || method.ContainsGenericParameters) continue;
+
+                byte[] il;
+                try { il = method.GetMethodBody()?.GetILAsByteArray(); }
+                catch (Exception) { continue; }
+                if (il == null) continue;
+
+                // call <token>; a match at a non-instruction offset only patches a method without changing it
+                for (int i = 0; i + 4 < il.Length; i++)
+                    if (il[i] == 0x28 && combineSpecs.Contains(BitConverter.ToInt32(il, i + 1)))
+                    {
+                        yield return method;
+                        break;
+                    }
+            }
         }
-    }
 
-    //  ─── PATCH 3 ints ─────────────────────────────────────────
-    [HarmonyPatch]
-    static class Combine3Patch
-    {
-        static MethodBase TargetMethod() => HashCodeDetours.GetCombineIntMethod(3);
-
-        static bool Prefix(int value1, int value2, int value3, ref int __result)
+        static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> insts)
         {
-            if (Multiplayer.Client == null)
-                return true;
+            foreach (var inst in insts)
+            {
+                if (inst.operand is MethodInfo { IsGenericMethod: true } m && m.DeclaringType == typeof(HashCode) &&
+                    m.Name == nameof(HashCode.Combine) && m.GetGenericArguments().All(t => t == typeof(int)))
+                    inst.operand = AccessTools.Method(typeof(HashCodeCombineCallers), "Combine" + m.GetGenericArguments().Length);
 
-            __result = DeterministicHash.HashCombineInt(value1, value2, value3);
-            return false;
+                yield return inst;
+            }
         }
-    }
 
-    //  ─── PATCH 4 ints ─────────────────────────────────────────
-    [HarmonyPatch]
-    static class Combine4Patch
-    {
-        static MethodBase TargetMethod() => HashCodeDetours.GetCombineIntMethod(4);
-
-        static bool Prefix(int value1, int value2, int value3, int value4, ref int __result)
-        {
-            if (Multiplayer.Client == null)
-                return true;
-
-            __result = Gen.HashCombineInt(value1, value2, value3, value4);
-            return false;
-        }
-    }
-
-    //  ─── PATCH 5 ints ─────────────────────────────────────────
-    [HarmonyPatch]
-    static class Combine5Patch
-    {
-        static MethodBase TargetMethod() => HashCodeDetours.GetCombineIntMethod(5);
-
-        static bool Prefix(int value1, int value2, int value3, int value4, int value5, ref int __result)
-        {
-            if (Multiplayer.Client == null)
-                return true;
-
-            __result = DeterministicHash.HashCombineInt(value1, value2, value3, value4, value5);
-            return false;
-        }
-    }
-
-    //  ─── PATCH 6 ints ─────────────────────────────────────────
-    [HarmonyPatch]
-    static class Combine6Patch
-    {
-        static MethodBase TargetMethod() => HashCodeDetours.GetCombineIntMethod(6);
-
-        static bool Prefix(int value1, int value2, int value3, int value4, int value5, int value6, ref int __result)
-        {
-            if (Multiplayer.Client == null)
-                return true;
-
-            __result = DeterministicHash.HashCombineInt(value1, value2, value3,
-                                                  value4, value5, value6);
-            return false;
-        }
-    }
-
-    //  ─── PATCH 7 ints ─────────────────────────────────────────
-    [HarmonyPatch]
-    static class Combine7Patch
-    {
-        static MethodBase TargetMethod() => HashCodeDetours.GetCombineIntMethod(7);
-
-        static bool Prefix(int value1, int value2, int value3, int value4, int value5, int value6, int value7, ref int __result)
-        {
-            if (Multiplayer.Client == null)
-                return true;
-
-            __result = DeterministicHash.HashCombineInt(value1, value2, value3, value4,
-                                                  value5, value6, value7);
-            return false;
-        }
-    }
-
-    //  ─── PATCH 8 ints ─────────────────────────────────────────
-    [HarmonyPatch]
-    static class Combine8Patch
-    {
-        static MethodBase TargetMethod() => HashCodeDetours.GetCombineIntMethod(8);
-
-        static bool Prefix(int value1, int value2, int value3, int value4, int value5, int value6, int value7, int value8, ref int __result)
-        {
-            if (Multiplayer.Client == null)
-                return true;
-
-            __result = DeterministicHash.HashCombineInt(value1, value2, value3, value4,
-                                                  value5, value6, value7, value8);
-            return false;
-        }
+        static int Combine2(int v1, int v2) => Gen.HashCombineInt(v1, v2);
+        static int Combine3(int v1, int v2, int v3) => DeterministicHash.HashCombineInt(v1, v2, v3);
+        static int Combine4(int v1, int v2, int v3, int v4) => Gen.HashCombineInt(v1, v2, v3, v4);
+        static int Combine5(int v1, int v2, int v3, int v4, int v5) =>
+            DeterministicHash.HashCombineInt(v1, v2, v3, v4, v5);
+        static int Combine6(int v1, int v2, int v3, int v4, int v5, int v6) =>
+            DeterministicHash.HashCombineInt(v1, v2, v3, v4, v5, v6);
+        static int Combine7(int v1, int v2, int v3, int v4, int v5, int v6, int v7) =>
+            DeterministicHash.HashCombineInt(v1, v2, v3, v4, v5, v6, v7);
+        static int Combine8(int v1, int v2, int v3, int v4, int v5, int v6, int v7, int v8) =>
+            DeterministicHash.HashCombineInt(v1, v2, v3, v4, v5, v6, v7, v8);
     }
 }
