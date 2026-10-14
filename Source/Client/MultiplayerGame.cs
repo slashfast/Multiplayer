@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -64,17 +65,11 @@ namespace Multiplayer.Client
 
             SetThingMakerSeed(1);
 
-            foreach (var field in typeof(DebugSettings).GetFields(BindingFlags.Public | BindingFlags.Static))
-                if (!field.IsLiteral && field.FieldType == typeof(bool))
-                    field.SetValue(null, default(bool));
-
-            typeof(DebugSettings).TypeInitializer.Invoke(null, null);
+            StaticDefaults.Restore();
 
             foreach (var resolver in DefDatabase<RuleDef>.AllDefs.SelectMany(r => r.resolvers))
                 if (resolver is SymbolResolver_EdgeThing edgeThing)
                     edgeThing.randomRotations = new List<int>() { 0, 1, 2, 3 };
-
-            typeof(SymbolResolver_SingleThing).TypeInitializer.Invoke(null, null);
 
             FactionCreator.ClearData();
         }
@@ -143,5 +138,38 @@ namespace Multiplayer.Client
             Find.MainTabsRoot?.EscapeCurrentTab();
             Find.ColonistBar?.MarkColonistsDirty();
         }
+    }
+
+    /// <summary>
+    /// Initial values of static fields, captured at startup and restored when a game is (re)loaded.
+    /// Re-running a static constructor through TypeInitializer.Invoke worked on Mono, but on .NET (RimWorld 1.7)
+    /// it does nothing for an already initialized type: DebugSettings stayed reset to false
+    /// (enableDamage, enableStoryteller, anomalyDarkeningFX = effecters without children, ...).
+    /// </summary>
+    public static class StaticDefaults
+    {
+        private static readonly Type[] Types = { typeof(DebugSettings), typeof(SymbolResolver_SingleThing) };
+        private static readonly Dictionary<FieldInfo, object> defaults = new();
+
+        public static void Capture()
+        {
+            foreach (var type in Types)
+            foreach (var field in Fields(type))
+                defaults[field] = Copy(field.GetValue(null));
+        }
+
+        public static void Restore()
+        {
+            foreach (var (field, value) in defaults)
+                field.SetValue(null, Copy(value));
+        }
+
+        private static IEnumerable<FieldInfo> Fields(Type type) =>
+            type.GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static)
+                .Where(f => !f.IsLiteral && !f.IsInitOnly && (f.FieldType.IsValueType || f.FieldType == typeof(string) ||
+                                                              f.FieldType.IsArray && f.FieldType.GetElementType()!.IsValueType));
+
+        // Arrays (e.g. SymbolResolver_SingleThing.tmpRotations) are shuffled in place, keep a separate copy
+        private static object Copy(object value) => value is Array array ? array.Clone() : value;
     }
 }

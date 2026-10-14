@@ -133,6 +133,7 @@ namespace Multiplayer.Client
             ScribeLike.provider = new ScribeProvider();
             settings = MultiplayerLoader.Multiplayer.instance!.GetSettings<MpSettings>();
 
+            StaticDefaults.Capture();
             EarlyInit.ProcessEnvironment();
             EarlyInit.EarlyPatches(harmony);
             MpReflection.allAssembliesHook = RwAllAssemblies;
