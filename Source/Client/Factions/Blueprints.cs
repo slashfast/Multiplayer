@@ -148,15 +148,19 @@ namespace Multiplayer.Client
             var finder = new CodeFinder(original, insts);
             int pos = finder.Forward(OpCodes.Stloc_S, 5);
 
+            // Skip to the loop increment (the first instruction after the "return the report" leave),
+            // jumping to the method's return would branch out of the enumerator's try block and skip setting the result
+            int leave = insts.FindIndex(pos, i => i.opcode == OpCodes.Leave || i.opcode == OpCodes.Leave_S);
+            if (leave < 0)
+                throw new Exception("PlaceWorkerTrapPatch: couldn't find the loop continue target");
+            insts[leave + 1].labels.Add(label);
+
             insts.Insert(
                 pos + 1,
                 new CodeInstruction(OpCodes.Ldloc_S, 5),
                 new CodeInstruction(OpCodes.Call, CanPlaceBlueprintAtPatch.ShouldIgnore1Method),
                 new CodeInstruction(OpCodes.Brtrue, label)
             );
-
-            int ret = finder.Start().Forward(OpCodes.Ret);
-            insts[ret + 1].labels.Add(label);
 
             return insts;
         }

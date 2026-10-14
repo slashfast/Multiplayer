@@ -82,7 +82,7 @@ namespace Multiplayer.Client
             }
             yield return new CodeInstruction(OpCodes.Call, m_General);
             yield return new CodeInstruction(OpCodes.Brtrue, label);
-            foreach (var code in CreateDefaultCodes(gen, AccessTools.GetReturnedType(original)))
+            foreach (var code in CreateDefaultCodes(gen, AccessTools.GetReturnedType(original), loadStruct: true))
                 yield return code;
             yield return new CodeInstruction(OpCodes.Ret);
 
@@ -92,7 +92,8 @@ namespace Multiplayer.Client
                 yield return instruction;
         }
 
-        static IEnumerable<CodeInstruction> CreateDefaultCodes(ILGenerator generator, Type type)
+        // loadStruct: leave the default struct value on the stack (the out parameter case uses the initobj on its own)
+        static IEnumerable<CodeInstruction> CreateDefaultCodes(ILGenerator generator, Type type, bool loadStruct = false)
         {
             if (type.IsByRef)
                 type = type.GetElementType();
@@ -105,6 +106,8 @@ namespace Multiplayer.Client
                 var v = generator.DeclareLocal(type);
                 yield return new CodeInstruction(OpCodes.Ldloca, v);
                 yield return new CodeInstruction(OpCodes.Initobj, type);
+                if (loadStruct)
+                    yield return new CodeInstruction(OpCodes.Ldloc, v);
                 yield break;
             }
             if (AccessTools.IsValue(type)) {
