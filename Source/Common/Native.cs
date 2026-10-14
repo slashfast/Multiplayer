@@ -14,6 +14,9 @@ namespace Multiplayer.Client
             Windows, OSX, Linux, Dummy
         }
 
+        // The Mono internals used here (jit info, LMF, dllmap) don't exist on other runtimes (RimWorld 1.7 runs on CoreCLR)
+        public static readonly bool IsMono = Type.GetType("Mono.Runtime") != null;
+
         public static IntPtr DomainPtr { get; private set; }
 
         // LMF is Last Managed Frame
@@ -24,6 +27,8 @@ namespace Multiplayer.Client
 
         public static void EarlyInit(NativeOS os)
         {
+            if (!IsMono) return;
+
             if (os == NativeOS.Linux)
                 TheLinuxWay();
             if (os == NativeOS.OSX)
@@ -46,8 +51,8 @@ namespace Multiplayer.Client
 
         public static unsafe void InitLmfPtr(NativeOS os)
         {
-            // Don't bother on 32 bit runtimes
-            if (IntPtr.Size == 4)
+            // Don't bother on 32 bit runtimes or non-Mono runtimes
+            if (IntPtr.Size == 4 || !IsMono)
                 return;
 
             const BindingFlags all = BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public |

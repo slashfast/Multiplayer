@@ -38,6 +38,8 @@ public static class JittedMethods
 
     public static void Init()
     {
+        if (!Native.IsMono) return;
+
         profiler = Native.mono_profiler_create(IntPtr.Zero);
         Native.mono_profiler_set_jit_done_callback(profiler, (_, method, _) =>
         {
@@ -73,6 +75,8 @@ public static class JittedMethods
 
     public static void OnApplicationQuit()
     {
+        if (!Native.IsMono) return;
+
         Native.mono_profiler_set_jit_done_callback(profiler, null);
     }
 

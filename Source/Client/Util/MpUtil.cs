@@ -18,6 +18,10 @@ namespace Multiplayer.Client
     {
         public static unsafe void MarkNoInlining(MethodBase method)
         {
+            // Pokes the MonoMethod struct, on other runtimes this would corrupt the MethodDesc (e.g. its token).
+            // There Harmony (MonoMod) disables inlining of the methods it patches on its own.
+            if (!Native.IsMono) return;
+
             ushort* iflags = (ushort*)(method.MethodHandle.Value) + 1;
             *iflags |= (ushort)MethodImplOptions.NoInlining;
         }

@@ -151,6 +151,8 @@ namespace Multiplayer.Client
         [MethodImpl(MethodImplOptions.NoInlining)]
         private static void DisableOmitFramePointer()
         {
+            if (!Native.IsMono) return;
+
             Native.mini_parse_debug_option("disable_omit_fp");
         }
 
