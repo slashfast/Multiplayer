@@ -15,13 +15,6 @@ Multiplayer mod for RimWorld.
 FAQ - https://hackmd.io/@rimworldmultiplayer/docs/
 Discord - https://discord.gg/S4bxXpv
   </description>
-  <modDependencies>
-    <li>
-      <packageId>zetrith.prepatcher</packageId>
-      <displayName>Prepatcher</displayName>
-      <steamWorkshopUrl>steam://url/CommunityFilePage/2934420800</steamWorkshopUrl>
-    </li>
-  </modDependencies>
   <loadAfter>
     <li>Ludeon.RimWorld</li>
     <li>Ludeon.RimWorld.Royalty</li>
@@ -29,7 +22,6 @@ Discord - https://discord.gg/S4bxXpv
     <li>Ludeon.RimWorld.Biotech</li>
     <li>Ludeon.RimWorld.Anomaly</li>
     <li>Ludeon.RimWorld.Odyssey</li>
-    <li>zetrith.prepatcher</li>
     <li>brrainz.harmony</li>
   </loadAfter>
   <loadBefore>

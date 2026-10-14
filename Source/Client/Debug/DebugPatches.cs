@@ -246,6 +246,13 @@ namespace Multiplayer.Client.Patches
         static bool Prefix() => false;
     }
 
+    // Several game instances run side by side when debugging
+    [HarmonyPatch(typeof(ResolutionUtility), nameof(ResolutionUtility.SetResolutionRaw))]
+    static class DontSetResolution
+    {
+        static bool Prefix() => false;
+    }
+
     [HarmonyPatch(typeof(Log), nameof(Log.Notify_MessageReceivedThreadedInternal))]
     static class DisableLogMessageLimit
     {

@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
-using Mono.Cecil;
 using Multiplayer.API;
 using Multiplayer.Client.Util;
 using RimWorld;
@@ -12,45 +11,51 @@ namespace MultiplayerLoader;
 
 public static class SyncRituals
 {
-    private static List<ISyncMethodForPrepatcher> syncMethodsWithPrepatches = new();
+    private static readonly Harmony harmony = new("rwmt.multiplayer.sync-rituals");
+    private static readonly Dictionary<(Type, string), List<ISyncMethodWithTargetType>> syncMethodsByTarget = new();
 
-    public static bool PrepatcherPrefix(int index, object __instance, object[] __args)
+    // This prefix is applied to a generic method and called by all possible instantiations
+    // The target type check makes sure we only sync for the correct one
+    public static bool GenericPrefix(MethodBase __originalMethod, object __instance, object[] __args)
     {
-        // This prefix is applied to a generic method and called by all possible instantiations
-        // This check makes sure the type is correct
-        if (syncMethodsWithPrepatches[index].TargetType == __instance.GetType())
-            return !syncMethodsWithPrepatches[index].DoSync(__instance, __args);
+        if (syncMethodsByTarget.TryGetValue(Key(__originalMethod), out var list))
+            foreach (var syncMethod in list)
+                if (syncMethod.TargetType == __instance.GetType())
+                    return !syncMethod.DoSync(__instance, __args);
+
         return true;
+    }
+
+    // The generic method definition is shared by every instantiation of the declaring type
+    private static (Type, string) Key(MethodBase method)
+    {
+        var declaring = method.DeclaringType!;
+        return (declaring.IsGenericType ? declaring.GetGenericTypeDefinition() : declaring, method.Name);
     }
 
     private static MethodInfo syncMethod = AccessTools.Method("Multiplayer.Client.Sync:Method");
 
-    // This method is called twice (two passes)
-    // The first pass with module != null is called from Prepatcher and applies prepatches
-    // The second pass with module == null is called from Sync initialization and registers SyncMethods
-    public static void ApplyPrepatches(ModuleDefinition module)
+    // Called from Sync initialization. Registers SyncMethods and patches the generic base class methods
+    public static void ApplyPatches()
     {
-        void Register(Type baseType, string method, Type derivedType, Action<ISyncMethodForPrepatcher> postProcess = null)
+        void Register(string method, Type derivedType, Action<ISyncMethodWithTargetType> postProcess = null)
         {
-            if (module != null)
-            {
-                Prepatches.AddPrepatcherPrefix(
-                    module,
-                    syncMethodsWithPrepatches.Count,
-                    AccessTools.Method(baseType, method),
-                    AccessTools.Method(typeof(SyncRituals), nameof(PrepatcherPrefix))
-                );
+            // MonoMod can't detour methods of an open generic type, so use the closed base type of the derived type.
+            // All the reference type instantiations share the same code, GenericPrefix checks the instance type
+            var target = AccessTools.Method(derivedType.BaseType, method);
 
-                // The ids need to be in sync between passes (note the array is recreated after Prepatcher restarts the game)
-                syncMethodsWithPrepatches.Add(null);
-            }
-            else
+            // Sync.Method doesn't apply a Harmony patch and doesn't require the DeclaringType to be the target type
+            var newSyncMethod = (ISyncMethodWithTargetType)syncMethod.Invoke(null, [derivedType, method, null]);
+            postProcess?.Invoke(newSyncMethod);
+
+            var key = Key(target);
+            if (!syncMethodsByTarget.TryGetValue(key, out var list))
             {
-                // Sync.Method doesn't apply a Harmony patch and doesn't require the DeclaringType to be the target type
-                var newSyncMethod = (ISyncMethodForPrepatcher)syncMethod.Invoke(null, [derivedType, method, null]);
-                postProcess?.Invoke(newSyncMethod);
-                syncMethodsWithPrepatches.Add(newSyncMethod);
+                syncMethodsByTarget[key] = list = new();
+                harmony.Patch(target, prefix: new HarmonyMethod(typeof(SyncRituals), nameof(GenericPrefix)));
             }
+
+            list.Add(newSyncMethod);
         }
 
         // ======= PawnRitualRoleSelectionWidget =======
@@ -64,27 +69,26 @@ public static class SyncRituals
             RitualRoleReader<PawnPsychicRitualRoleSelectionWidget, PsychicRitualRoleDef>
         );
 
-        Register(typeof(PawnRoleSelectionWidgetBase<>), nameof(PawnRoleSelectionWidgetBase<RitualRole>.TryAssignReplace),
+        Register(nameof(PawnRoleSelectionWidgetBase<RitualRole>.TryAssignReplace),
             typeof(PawnRitualRoleSelectionWidget),
             m => m.TransformArgument(1, ritualRolesSerializer));
-        Register(typeof(PawnRoleSelectionWidgetBase<>), nameof(PawnRoleSelectionWidgetBase<PsychicRitualRoleDef>.TryAssignReplace),
+        Register(nameof(PawnRoleSelectionWidgetBase<PsychicRitualRoleDef>.TryAssignReplace),
             typeof(PawnPsychicRitualRoleSelectionWidget),
             m => m.TransformArgument(1, psychicRitualRolesSerializer));
 
-        Register(typeof(PawnRoleSelectionWidgetBase<>), nameof(PawnRoleSelectionWidgetBase<RitualRole>.TryAssignAnyRole),
+        Register(nameof(PawnRoleSelectionWidgetBase<RitualRole>.TryAssignAnyRole),
             typeof(PawnRitualRoleSelectionWidget));
-        Register(typeof(PawnRoleSelectionWidgetBase<>), nameof(PawnRoleSelectionWidgetBase<PsychicRitualRoleDef>.TryAssignAnyRole),
+        Register(nameof(PawnRoleSelectionWidgetBase<PsychicRitualRoleDef>.TryAssignAnyRole),
             typeof(PawnPsychicRitualRoleSelectionWidget));
 
-        Register(typeof(PawnRoleSelectionWidgetBase<>), nameof(PawnRoleSelectionWidgetBase<RitualRole>.TryAssign),
+        Register(nameof(PawnRoleSelectionWidgetBase<RitualRole>.TryAssign),
             typeof(PawnRitualRoleSelectionWidget),
             m => m.TransformArgument(1, ritualRolesSerializer));
-        Register(typeof(PawnRoleSelectionWidgetBase<>), nameof(PawnRoleSelectionWidgetBase<PsychicRitualRoleDef>.TryAssign),
+        Register(nameof(PawnRoleSelectionWidgetBase<PsychicRitualRoleDef>.TryAssign),
             typeof(PawnPsychicRitualRoleSelectionWidget),
             m => m.TransformArgument(1, psychicRitualRolesSerializer));
 
         Register(
-            typeof(PawnRoleSelectionWidgetBase<>),
             MpMethodUtil.GetLambda(
                 typeof(PawnRoleSelectionWidgetBase<ILordJobRole>),
                 nameof(PawnRoleSelectionWidgetBase<RitualRole>.DrawPawnListInternal),
@@ -92,7 +96,6 @@ public static class SyncRituals
             typeof(PawnRitualRoleSelectionWidget)
         ); // Roles right click delegate (try assign spectate)
         Register(
-            typeof(PawnRoleSelectionWidgetBase<>),
             MpMethodUtil.GetLambda(
                 typeof(PawnRoleSelectionWidgetBase<ILordJobRole>),
                 nameof(PawnRoleSelectionWidgetBase<PsychicRitualRoleDef>.DrawPawnListInternal),
@@ -101,7 +104,6 @@ public static class SyncRituals
         ); // Roles right click delegate (try assign spectate)
 
         Register(
-            typeof(PawnRoleSelectionWidgetBase<>),
             MpMethodUtil.GetLambda(
                 typeof(PawnRoleSelectionWidgetBase<ILordJobRole>),
                 nameof(PawnRoleSelectionWidgetBase<RitualRole>.DrawPawnListInternal),
@@ -109,7 +111,6 @@ public static class SyncRituals
             typeof(PawnRitualRoleSelectionWidget)
         ); // Not participating left click delegate (try assign any role or spectate)
         Register(
-            typeof(PawnRoleSelectionWidgetBase<>),
             MpMethodUtil.GetLambda(
                 typeof(PawnRoleSelectionWidgetBase<ILordJobRole>),
                 nameof(PawnRoleSelectionWidgetBase<PsychicRitualRoleDef>.DrawPawnListInternal),
