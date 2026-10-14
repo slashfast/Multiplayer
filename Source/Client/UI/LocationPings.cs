@@ -66,7 +66,7 @@ public class LocationPings
         if (keyNullable == KeyCode.Mouse2)
             return MpInput.Mouse2UpWithoutDrag;
 
-        return Input.GetKeyDown(key);
+        return MpInput.GetKeyDown(key);
     }
 
     private void PingLocation(int map, PlanetTile tile, Vector3 loc)

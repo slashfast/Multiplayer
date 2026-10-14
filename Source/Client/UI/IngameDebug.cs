@@ -77,7 +77,7 @@ public static class IngameDebug
 
                 text.AppendLine($"\nMap RNG: {(uint)async.randState:X8} {(uint)(async.randState >> 32):X8}");
                 text.AppendLine($"World RNG: {(uint)Multiplayer.AsyncWorldTime.randState:X8} {(uint)(Multiplayer.AsyncWorldTime.randState >> 32):X8}");
-                text.AppendLine($"Mouse2: {MpInput.Mouse2UpWithoutDrag}   Up: {Input.GetKeyUp(KeyCode.Mouse2)}   Held: {Input.GetKey(KeyCode.Mouse2)}");
+                text.AppendLine($"Mouse2: {MpInput.Mouse2UpWithoutDrag}   Up: {MpInput.GetKeyUp(KeyCode.Mouse2)}   Held: {MpInput.GetKey(KeyCode.Mouse2)}");
                 text.AppendLine($"Cell Size: {UI.CurUICellSize()}{separator} Windows: {Find.WindowStack.windows.Count}");
 
                 string focusedWin = Find.WindowStack.focusedWindow is ImmediateWindow win ?
