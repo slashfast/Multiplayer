@@ -49,6 +49,11 @@ namespace Multiplayer.Client
         public bool ghostModeCheckbox;
 
         public Process arbiter;
+        public string arbiterPath;
+        public string arbiterArgs;
+        public float arbiterLaunchTime;
+        public int arbiterRestarts;
+        public bool arbiterEverJoined;
         public bool ArbiterPlaying => players.Any(p => p.type == PlayerType.Arbiter && p.status == PlayerStatus.Playing);
 
         public IConnector connector;
@@ -150,6 +155,26 @@ namespace Multiplayer.Client
         public void Update()
         {
             locationPings.UpdatePing();
+            ArbiterWatchdog();
+        }
+
+        private const int MaxArbiterRestarts = 3;
+        private const float ArbiterRestartWindowSeconds = 180;
+
+        // The arbiter is a second instance of the game, it can crash on startup (e.g. in the Steam API init
+        // as it doesn't own the Steam session), so restart it if it died before it ever joined
+        private void ArbiterWatchdog()
+        {
+            if (arbiterArgs == null || arbiter == null) return;
+
+            if (ArbiterPlaying) arbiterEverJoined = true;
+
+            if (arbiterEverJoined || !arbiter.HasExited || arbiterRestarts >= MaxArbiterRestarts) return;
+            if (Time.realtimeSinceStartup - arbiterLaunchTime > ArbiterRestartWindowSeconds) return;
+
+            arbiterRestarts++;
+            Log.Warning($"The Arbiter process exited with code {arbiter.ExitCode} before joining, restarting ({arbiterRestarts}/{MaxArbiterRestarts})");
+            HostUtil.LaunchArbiterProcess();
         }
     }
 }

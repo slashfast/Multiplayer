@@ -235,16 +235,26 @@ namespace Multiplayer.Client
                 arbiterInstancePath = Process.GetCurrentProcess().MainModule!.FileName;
             }
 
+            Multiplayer.session.arbiterPath = arbiterInstancePath;
+            Multiplayer.session.arbiterArgs = args;
+            LaunchArbiterProcess();
+        }
+
+        public static void LaunchArbiterProcess()
+        {
+            var session = Multiplayer.session;
+            session.arbiterLaunchTime = Time.realtimeSinceStartup;
+
             try
             {
-                Multiplayer.session.arbiter = Process.Start(
-                    arbiterInstancePath,
-                    args
+                session.arbiter = Process.Start(
+                    session.arbiterPath,
+                    session.arbiterArgs
                 );
             }
             catch (Exception ex)
             {
-                Multiplayer.session.AddMsg("Arbiter failed to start.", false);
+                session.AddMsg("Arbiter failed to start.", false);
                 Log.Error("Arbiter failed to start.");
                 Log.Error(ex.ToString());
                 if (ex.InnerException is Win32Exception)
